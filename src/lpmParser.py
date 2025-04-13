@@ -68,7 +68,10 @@ class DataObject:
 
     def getFile(self):
         return self.dataFile
-        
+    
+    def flushFile(self):
+        self.dataFile = []        
+
     def setFile(self,fullFileName):
         self.dataFile = fullFileName
         self.dataObjType = 'file'
