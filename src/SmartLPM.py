@@ -599,8 +599,10 @@ class programGUI(QMainWindow):
             #self.reassignData()
             self.thresholdChanged(self.data.threshold)
             self.dynReassignment = True
+            self.dataWasReassigned = True
         else:
             self.dynReassignment = False
+            self.dataWasReassigned = False
         print('dynamic reassignment set to ' + str(self.dynReassignment))
     
     def onCalibrationAvailable(self, table):        
@@ -652,7 +654,7 @@ class programGUI(QMainWindow):
         
 
     def assignCurrPoint(self, currElementInd, currPulse, indL, indP, currentPower):
-        
+       
         # print("threshod being applied", self.data.threshold)
         if currentPower <= self.data.threshold:
             currentPower = 0
@@ -848,6 +850,8 @@ class programGUI(QMainWindow):
             self.StartButton.setText("Aquire now")
             self.acquiringNow = False
         else:
+            self.DataCanvas.axes.clear() # Clear plots before starting
+            self.data.flushFile() # we ensure there is no data from a file 
             self.StartButton.setText("stop")
             self.acquiringNow = True
             self.acquireLPM()
@@ -914,10 +918,12 @@ class programGUI(QMainWindow):
                         
         savePath, baseName = os.path.split(path[:-4])
         
+        # The block below works if the file list is flushed while starting 
+        # a new acquisition
         if self.data.getFile() == []:
-            # No file open, get the file from the stream        
-            inputFullPath = self.manager.returnFileNames()[-1]            
-        else: 
+            # No file open, get the file from the stream            
+            inputFullPath = self.manager.returnFileNames()[-1]        
+        else:
             autosavedFile = self.data.getFile()        
             inputFullPath = os.path.join(path,autosavedFile)
                 
@@ -929,7 +935,7 @@ class programGUI(QMainWindow):
         outputPathFullData = os.path.join(savePath,filename1)
         print(outputPathFullData)
 
-        if self.dataWasReassigned:            
+        if self.dataWasReassigned:
             for wavelengthInd in range(len(self.signature.wavelengths)):
                 filename2 = filename0 + str(self.signature.wavelengths[wavelengthInd]) + 'nm'
                 if self.dataWasRecalibrated:
@@ -960,6 +966,8 @@ class programGUI(QMainWindow):
                     wavelengthInd = int(wavelengthInd)
                     powerInd = int(powerInd)
                     
+                    print(outputPathsFilteredData)
+
                     file = outputPathsFilteredData[wavelengthInd]
                     with open(file, 'a+', newline='') as outfileFiltered:
                         writer2 = csv.writer(outfileFiltered, delimiter='\t')
@@ -1023,12 +1031,18 @@ class programGUI(QMainWindow):
 
         if (self.dynReassignment):            
             self.displaySortedDataRealTime()
- 
+
+
+
+
         else:    
             self.DataCanvas.redraw(
                     self.acquiredData[0],
                     [self.acquiredData[1],self.thresholdLine]
                 )
+
+
+
 
     def selectDataFile(self, dataFile):
         
@@ -1168,7 +1182,7 @@ class programGUI(QMainWindow):
         RGB[:,0] = self.signature.Red
         RGB[:,1] = self.signature.Green
         RGB[:,2] = self.signature.Blue
-        
+
         for wavelength in range(self.signature.wavelengthCount):
             plotColor = (RGB[wavelength,0]/255,RGB[wavelength,1]/255,RGB[wavelength,2]/255)  
 
