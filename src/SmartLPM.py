@@ -81,16 +81,33 @@ class DataSignature():
             self.Red.append(RL)
             self.Green.append(GL)
             self.Blue.append(BL)
+    
+    @staticmethod
+    def stringOrList2Array(inputData):
+        
+        if isinstance(inputData, str):
+            inputData = inputData.strip('[]')
+            array = [elem.strip() for elem in inputData.split(',') if elem]
+            return array
+        if isinstance(inputData, list):
+            if len(inputData) == 1:        
+                return [int(inputData[0])]  # Convert the single element to a string in a list
+            elif len(inputData) > 1:                            
+                return [int(elem) for elem in inputData]  # Convert each element to a string
 
     def calculateSignature(self):
         # The full signature consists in power setting blocks concatenated
 
         self.calculateColors(self.wavelengths)
-
-        self.wavelengthCount   = len(self.wavelengths)
-        self.powerSettingCount = len(self.setPowers)
-        pulsesPerBlock = self.powerSettingCount * self.wavelengthCount
         
+        setPowerArray = self.stringOrList2Array(self.setPowers)
+        wavelengthArray = self.stringOrList2Array(self.wavelengths)
+
+        self.powerSettingCount = len(setPowerArray)
+        self.wavelengthCount   = len(wavelengthArray)
+
+        pulsesPerBlock = self.powerSettingCount * self.wavelengthCount
+
         duration = self.duration-self.signaturePause # We want to prepend one section of zeros atr the beggining
         self.readoutCount = int((duration / self.readoutInterval) + 1)
 
@@ -116,11 +133,13 @@ class DataSignature():
             
             # the placeholder defines the signature to repeat for every
             for setPowerInd in range(self.powerSettingCount):
+
                 for readout in range(dataPointsPerPulse):
-                    placeholder.append(self.setPowers[setPowerInd])
+                    placeholder.append(setPowerArray[setPowerInd])
+                    
                 for readout in range(idlePointsPerPulse):
                     placeholder.append(0)
-            
+
             lblk = self.wavelengthCount*len(placeholder)
             blockSignature = np.zeros((self.wavelengthCount, lblk))
             # For each wavelegth indices start with an offset
@@ -257,11 +276,11 @@ class programGUI(QMainWindow):
             "averageInterval",
             "readoutInterval",            
             "signaturePause",
-            "order"]
-
-        self.defaultDataPath  = os.path.join(os.path.dirname(__file__),"Data")
-        self.settingsFilePath = os.path.join(os.path.dirname(__file__),"Config")
-        self.configFile = "process.tsv"
+            "order",
+            "dataSavePath"]
+        
+        self.settingsFilePath = 'C:/ProgramData/SmartLPM/Config'
+        self.configFile = "defaultProcess.tsv"
         
         self.data = DataObject()
         
@@ -329,7 +348,13 @@ class programGUI(QMainWindow):
         self.wavelengthWidget = PushPopList('wavelengths:','nm', self.updateWavelengthsAndReplot)        
         self.powerSettingWidget = PushPopList('power setting:','%', self.updatePowersAndReplot)
         
-        self.setupFileWdgt = FileAccessWidgt('Process file', "", "Setup files (*.csv *tsv *.txt)", self.setupFromFile, self.saveSetupToFile)
+        self.setupFileWdgt = FileAccessWidgt(
+            'Process file', 
+            self.settingsFilePath, 
+            "Setup files (*.csv *tsv *.txt)", 
+            self.setupFromFile, 
+            self.saveSetupToFile
+            )
 
         for box in [self.durationInput, self.readoutIntervalInput, 
                     self.signaturePauseInput,self.measurementIntervalInput]:
@@ -351,6 +376,7 @@ class programGUI(QMainWindow):
 
         # To initialize the widgets and data ignature from a file
         self.setupFromFile(self.configFile)
+        self.defaultDataPath = self.dataSavePath
                 
         # The elements on the panel
         titleSpanH = 1
@@ -394,7 +420,14 @@ class programGUI(QMainWindow):
         self.DataCanvas = DataCanvas(self, width=5, height=4, dpi=100)
 
         # Data files
-        self.dataFileWdgt = FileAccessWidgt('Data file', self.defaultDataPath, "Data files (*.csv *tsv *.txt)", self.selectDataFile, self.saveDataFile)
+        self.dataFileWdgt = FileAccessWidgt(
+            'Data file', 
+            self.defaultDataPath, 
+            "Data files (*.csv *tsv *.txt)", 
+            self.selectDataFile, 
+            self.saveAndUpdatePath
+        )
+
 
         # Threshold slider
         self.ThresholdSlider = QSlider()
@@ -452,7 +485,7 @@ class programGUI(QMainWindow):
 
         self.dynCalChk.stateChanged.connect(self.toggleDynamicCorrection)
 
-        self.toggleCheckEnable(self.dynCalChk)
+        self.toggleCheckEnable(self.dynCalChk, "off")
 
         # All elements into panel
         dataplotSpanV = 1
@@ -513,8 +546,7 @@ class programGUI(QMainWindow):
         # .................................................................
 
         self.central_widget = QWidget(self)        
-        
-        
+                
         # Layout 
         self.central_layout  = QGridLayout()
         self.central_widget.setLayout(self.central_layout)
@@ -526,6 +558,14 @@ class programGUI(QMainWindow):
         self.central_layout.addWidget(self.DataPanel, 1,0)
         self.central_layout.addWidget(self.ExecPanel, 2,0)
 
+    def saveAndUpdatePath(self, pathMetheny):
+        # Ensures that the data path chosen by the user gets
+        # saved for the next session(s)
+        self.defaultDataPath = self.saveDataFile(pathMetheny)
+        TSVAccess.overwriteFieldValueTSV('dataSavePath', self.defaultDataPath, 
+            os.path.join(self.settingsFilePath,self.configFile)
+            )
+
     def checkConsistency(self):
         if self.wavelengths == self.calibratedWavelengths:
             print('Calibration wavelengths match the ones listed for measurement.')
@@ -534,14 +574,13 @@ class programGUI(QMainWindow):
             print('Consistency check failed. Please check the wavelength lists.')
             self.calibrationConsistency = False
             
-
-    def toggleCheckEnable(self, box):        
-        if box.isEnabled():
-            box.setEnabled(False)
-            #box.setStyleSheet("color: #A9A9A9")
-        else:
-            box.setEnabled(True)
-            #box.setStyleSheet("color: #2F2F2F")
+    def toggleCheckEnable(self, box, arg):
+        if arg == 'off':
+            if box.isEnabled():
+                box.setEnabled(False)
+        elif arg == 'on':
+            if not box.isEnabled():
+                box.setEnabled(True)
 
     def selectorEnable(self, combo, message):
         combo.listDisplay.setEnabled(True)
@@ -647,7 +686,7 @@ class programGUI(QMainWindow):
 
     def enableCalibratedAcquisition(self):        
 
-        self.toggleCheckEnable(self.dynCalChk)
+        self.toggleCheckEnable(self.dynCalChk, "on")
         print('self.referenceWavelth: ' + str(self.device.referenceWavelength))
         self.refWavelthInput.listDisplay.setCurrentText(str(self.device.referenceWavelength))
         self.refWavelthInput.titleWdgt.setText("Central wavelength [nm]")
@@ -783,8 +822,8 @@ class programGUI(QMainWindow):
         else:
             print("Please open file or start acquisition")
 
-    def saveSetupToFile(self,processFileName):
-        fullPath = os.path.join(self.settingsFilePath,processFileName)
+    def saveSetupToFile(self, fileName):
+        fullPath = os.path.join(self.settingsFilePath, self.configFile)
         print("saving process in  "+fullPath)
         print("Process:")
         if(os.path.isfile(fullPath)):
@@ -820,14 +859,19 @@ class programGUI(QMainWindow):
         self.measurementIntervalInput.inputEdit.setText(str(self.measurementInterval))
         self.readoutIntervalInput.inputEdit.setText(str(self.readoutInterval))
         self.signaturePauseInput.inputEdit.setText(str(self.signaturePause))
-        
+
+
+
         print('Adding wavelengths:')
-        for wavelength in self.wavelengths:
+        for wavelength in DataSignature.stringOrList2Array(self.wavelengths):
+
             self.wavelengthWidget.inputBox.setText(str(wavelength))
             self.wavelengthWidget.addElement()
 
         print('Adding set powers:')
-        for setPower in self.setPowers:
+        # for setPower in self.setPowers:
+        for setPower in DataSignature.stringOrList2Array(self.setPowers):
+        
             self.powerSettingWidget.inputBox.setText(str(setPower))
             self.powerSettingWidget.addElement()
         
@@ -932,21 +976,29 @@ class programGUI(QMainWindow):
         # Save the originalData
         filename0 = baseName + datetime.now().strftime("%Y%m%d-%H%M_")
         filename1 = filename0 + 'raw.csv'
-        outputPathFullData = os.path.join(savePath,filename1)
-        print(outputPathFullData)
+        outputPathRawData = os.path.join(savePath,filename1)
+        print(outputPathRawData)
 
         if self.dataWasReassigned:
+
             for wavelengthInd in range(len(self.signature.wavelengths)):
+                finalSavePath = os.path.join(savePath, 'Light Sources')
+                if not os.path.exists(finalSavePath):
+                    # Create the folder if needed
+                    os.makedirs(finalSavePath)
+
+
                 filename2 = filename0 + str(self.signature.wavelengths[wavelengthInd]) + 'nm'
+                
                 if self.dataWasRecalibrated:
                     filename2 = filename2 + '_Corr-' + \
                     str(round(self.calibrationTable[wavelengthInd],4))
 
                 filename2 = filename2 + '.csv'
-                outputPathsFilteredData.append(os.path.join(savePath,filename2))
+                outputPathsFilteredData.append(os.path.join(finalSavePath,filename2))
                                  
         header_written = {file: False for file in outputPathsFilteredData}
-        with open(inputFullPath, 'r', newline='') as infile, open(outputPathFullData, 'w+', newline='') as outfileMain:
+        with open(inputFullPath, 'r', newline='') as infile, open(outputPathRawData, 'w+', newline='') as outfileMain:
             reader = csv.reader(infile, delimiter='\t')
             writer1 = csv.writer(outfileMain, delimiter='\t')
             
@@ -979,6 +1031,7 @@ class programGUI(QMainWindow):
                             row[1] = str(self.signature.wavelengths[wavelengthInd])
                             row[2] = str(self.signature.setPowers[powerInd])
                             writer2.writerow(row)
+        return savePath
 
     def selectDataStream(self, timeLabels):
 
@@ -1088,7 +1141,7 @@ class programGUI(QMainWindow):
         
     def updateWavelengthsAndReplot(self):
         self.wavelengths = self.wavelengthWidget.list
-        print(self.wavelengths)
+
         self.updateSignature()
         # Update the list of wavelengths of choice for acquiring
         # During initialization of some objects this selector 
