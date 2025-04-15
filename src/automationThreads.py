@@ -66,8 +66,7 @@ class Worker(QObject):
             print(f"Running {self.runningMode}")
 
             if self.runningMode == 'test-standard':
-                    
-                time.sleep(0.1)  # Without this delay, the first number is consistently higher than the rest
+            
                 self.avgSimulation = 3.5
                 self.SimSpan = 10
                 origStdOut = sys.stdout
@@ -116,6 +115,7 @@ class Worker(QObject):
                         self.calledFunction(self.results)
 
             elif self.runningMode == 'system-standard':
+
                 self.sensor.connect()
                 thermometer = False
                 
@@ -137,7 +137,8 @@ class Worker(QObject):
                         elif temperature.value != 0:
                             print("timestamp\twavelength[nm]\tsetting[%]\tpower[mW]\ttemperature[C]")
                         sys.stdout = origStdOut
-
+                
+                time.sleep(0.5)  # Without this delay, the first number is consistently higher than the rest
                 start = datetime.now()
                 measure_until = start + timedelta(seconds=float(self.duration))
 
@@ -204,6 +205,8 @@ class Worker(QObject):
 
                 self.avgSimulation = 3.5
                 self.SimSpan = 2
+
+                time.sleep(0.5)  # Without this delay, the first number is consistently higher than the rest
                 start = datetime.now()
 
                 measure_until = start + timedelta(seconds=float(self.duration))
