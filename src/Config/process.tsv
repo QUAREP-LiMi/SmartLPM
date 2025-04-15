@@ -1,9 +1,0 @@
-﻿Process:
-wavelengths	[405, 488, 561, 640]
-setPowers	[10, 20, 40, 80]
-duration	130
-measurementInterval	120
-averageInterval	1
-readoutInterval	1
-signaturePause	2
-order	'LP'
