@@ -823,7 +823,7 @@ class programGUI(QMainWindow):
             print("Please open file or start acquisition")
 
     def saveSetupToFile(self, fileName):
-        fullPath = os.path.join(self.settingsFilePath, self.configFile)
+        fullPath = os.path.join(self.settingsFilePath, fileName)
         print("saving process in  "+fullPath)
         print("Process:")
         if(os.path.isfile(fullPath)):
@@ -986,7 +986,6 @@ class programGUI(QMainWindow):
                 if not os.path.exists(finalSavePath):
                     # Create the folder if needed
                     os.makedirs(finalSavePath)
-
 
                 filename2 = filename0 + str(self.signature.wavelengths[wavelengthInd]) + 'nm'
                 
