@@ -1,0 +1,10 @@
+Process:
+wavelengths	[405, 488, 561, 640]
+setPowers	[80]
+duration	3600
+measurementInterval	120
+averageInterval	1
+readoutInterval	1
+signaturePause	2
+order	LP
+dataSavePath	C:/ProgramData/SmartLPM/sampleData
