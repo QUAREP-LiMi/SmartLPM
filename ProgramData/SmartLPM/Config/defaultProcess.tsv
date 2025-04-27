@@ -8,3 +8,5 @@ readoutInterval	1
 signaturePause	2
 order	LP
 dataSavePath	C:/ProgramData/SmartLPM/sampleData/split
+lightSourceModel	example light source
+lightSourceIdentifier	test setup
