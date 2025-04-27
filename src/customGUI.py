@@ -138,9 +138,9 @@ class Functions:
 
 class FileAccessWidgt(QWidget):
     # All file access GUIs combined
-    def __init__(self, title, defaultPath, filter, effect1, effect2):
+    def __init__(self, title, defaultPath, filter, effect1, effect2, selectWhat):
         super().__init__()
-
+        self.selectWhat = selectWhat
         self.defaultPath = defaultPath
         self.filter = filter
         self.pathStr = ""
@@ -167,7 +167,10 @@ class FileAccessWidgt(QWidget):
         self.layout.addWidget(self.saveFileBtn)
 
     def saveFile(self):
-        self.pathStr, _ = QFileDialog.getSaveFileName(self,"Save File",self.defaultPath,self.filter)        
+        if self.selectWhat == 'select_files':
+            self.pathStr, _ = QFileDialog.getSaveFileName(self,"Save File",self.defaultPath,self.filter)        
+        if self.selectWhat == 'select_folders':
+            self.pathStr = QFileDialog.getExistingDirectory(self,"Select save folder")
         self.saveFunction(self.pathStr)
         print('saveding to'+self.pathStr)
 
