@@ -41,11 +41,29 @@ from fileInterface import TSVAccess
 
 class DataCanvas(FigureCanvasQTAgg):
     
-    def __init__(self, parent=None, width=5, height=4, dpi=100):       
+    def __init__(self, reactToScroll, parent=None, width=5, height=4, dpi=100):
         fig = Figure(figsize=(width, height), dpi=dpi, layout='constrained')
-        self.axes = fig.add_subplot(111, facecolor='black')
+        self.axes = fig.add_subplot(111, facecolor='black')        
         super(DataCanvas, self).__init__(fig)
-    
+        self.dataMax = []
+        self.dataMin = []
+        self.reactToScroll = reactToScroll
+
+        print(self.reactToScroll)
+
+        if self.reactToScroll:
+            # Some mouse magic here on the plot
+            # we will connect mouse events for the data plot only
+            self.scroll_cid = self.mpl_connect('scroll_event', self.onScroll)
+            self.click_cid = self.mpl_connect('button_press_event', self.onClick)
+        else:
+            self.scroll_cid = None
+            self.click_cid = None
+
+
+    def linkSlider(self, sliderHandle):
+        self.slider = sliderHandle
+        
     def redraw(self,xData,yData):
         self.axes.clear()
         for ind in range(len(yData)):
@@ -53,17 +71,80 @@ class DataCanvas(FigureCanvasQTAgg):
                 self.axes.plot(xData,yData[ind],'white')
             else:
                 self.axes.plot(xData,yData[ind],color='gray', linestyle='dashed')
+        self.dataMax = max(yData[0][:])
+        self.dataMin = min(yData[0][:])
         self.draw()
 
     def drawOnTop(self,xData,yData, plotColor):
         wavelengthCount = len(yData)
         for wavelength in range(wavelengthCount):
             self.axes.plot(xData,yData[wavelength],color=plotColor)
+        self.dataMax = max(yData)
+        self.dataMin = min(yData)            
         self.draw()
 
     def addSinglePlot(self,xData,yData, plotColor):
         self.axes.plot(xData,yData,color=plotColor)        
         self.draw()
+
+    def onScroll(self, event):
+        # Get current Y limits
+        currentYlim = self.axes.get_ylim()
+        lowerLimit, upperLimit = currentYlim
+
+        zoomFactor = 0.1 
+
+        # Check the direction of the scroll
+        if event.button == 'down':
+            # Zoom in
+            y_value = event.ydata
+            newLowerLimit = y_value - (y_value - lowerLimit) * (1 - zoomFactor)
+            newUpperLimit = y_value + (upperLimit - y_value) * (1 - zoomFactor)
+
+        elif event.button == 'up':
+            # Zoom out
+            y_value = event.ydata
+            newLowerLimit = y_value - (y_value - lowerLimit) * (1 + zoomFactor)
+            newUpperLimit = y_value + (upperLimit - y_value) * (1 + zoomFactor)
+
+        # Set new Y limits
+        self.axes.set_ylim(newLowerLimit, newUpperLimit)        
+        self.draw()
+
+    def onClick(self, event):
+        # Check if the click is within the axes        
+
+        if event.inaxes is not None:
+
+            if event.button == 1:  # Left mouse button
+                # Get the Y value at the clicked position
+                y_value = event.ydata
+                print(f"Y value at clicked position: {y_value}")
+            elif event.button == 3:  # Right mouse button
+                # Reset zoom
+                print(self.dataMax)
+                if self.dataMax.size > 0:
+                    self.axes.set_ylim(0, self.dataMax)
+                    self.draw()
+        else:
+            print("Clicked outside the axes.")
+
+    def update_slider_position(self):
+        # Get the current Y limits
+        currentYlim = self.axes.get_ylim()
+        lowerLimit, upperLimit = current_ylim
+        
+        # Get the current slider range
+        sliderMin = self.slider.minimum()
+        sliderMax = self.slider.maximum()
+        
+        # Calculate the current Y value (midpoint for example)
+        currYValue = (lowerLimit + upperLimit) / 2
+        
+        # Map the current Y value to the slider range
+        if upperLimit != lowerLimit:  # Avoid division by zero
+            sliderPosition = sliderMin + (currentYValue - lowerLimit) / (upperLimit - lowerLimit) * (sliderMax - sliderMin)
+            self.slider.setValue(int(sliderPosition))
 
 class DataSignature():
 
@@ -252,6 +333,49 @@ class CalibrationWindow(QWidget):
         self.setWavelengthSel.listDisplay.addItems(items)
         self.setWavelengthSel.listDisplay.setCurrentIndex(len(self.setWavelengthSel.choices)-1)
 
+class MetadataWindow(QWidget):
+    closed = Signal(str, str)
+    # Accessory window for the interactive calibration of the measurements
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowIcon(QIcon(os.path.dirname(__file__)+"/Resource/logo.png"))
+
+        self.lightSourceModel = ""
+        self.lightSourceUnit = ""
+        self.setWindowTitle("Light source information")
+        self.layout = QGridLayout()
+
+        # Widgets
+        self.modelLbl = QLabel('Light source (brand, model etc.):')
+        self.unitLbl  = QLabel('Unique identifier (S/N, etc.):')
+
+        self.modelInput = QLineEdit(self)
+        self.modelInput.textChanged.connect(self.setModel)
+        
+        self.unitInput = QLineEdit(self)
+        self.unitInput.textChanged.connect(self.setUnit)
+
+        self.CloseBtn = QPushButton("close", self)
+        self.CloseBtn.clicked.connect(self.close)
+
+        self.layout.addWidget(self.modelLbl, 0,0)
+        self.layout.addWidget(self.unitLbl,  1,0)
+        self.layout.addWidget(self.modelInput, 0,1)
+        self.layout.addWidget(self.unitInput,  1,1)
+        self.layout.addWidget(self.CloseBtn,   2,1)
+
+        self.setLayout(self.layout)
+
+    def setModel(self, textStr):
+        self.lightSourceModel = textStr
+
+    def setUnit(self, textStr):
+        self.lightSourceUnit = textStr
+
+    def closeEvent(self, event):
+        self.closed.emit(self.lightSourceModel, self.lightSourceUnit)
+
 class programGUI(QMainWindow):
     # Main program window
 
@@ -277,11 +401,13 @@ class programGUI(QMainWindow):
             "readoutInterval",            
             "signaturePause",
             "order",
-            "dataSavePath"]
+            "dataSavePath",
+            "lightSourceModel",
+            "lightSourceIdentifier"]
         
         self.settingsFilePath = 'C:/ProgramData/SmartLPM/Config'
         self.configFile = "defaultProcess.tsv"
-        
+
         self.data = DataObject()
         
         self.wavelengths = []
@@ -289,6 +415,7 @@ class programGUI(QMainWindow):
         self.calibrationFactors = []
         self.calibratedWavelengths = []
         self.calibrationConsistency = False #True when calibrated wavelengths match the ones listed for measurement
+        self.refWavelength = []
 
         # How to handle plots: automatic 
         # reassignment and correction 
@@ -331,6 +458,7 @@ class programGUI(QMainWindow):
 
         self.inputBoxesLayout = QGridLayout()
         self.selectorLayout  = QGridLayout()
+        self.metadataFieldLayout = QGridLayout()
 
         self.setupPanelTitle = QLabel("Setup acquisition")
         self.setupPanelTitle.setStyleSheet(Aesthetics.titleBar)
@@ -353,7 +481,8 @@ class programGUI(QMainWindow):
             self.settingsFilePath, 
             "Setup files (*.csv *tsv *.txt)", 
             self.setupFromFile, 
-            self.saveSetupToFile
+            self.saveSetupToFile,
+            "select_files"
             )
 
         for box in [self.durationInput, self.readoutIntervalInput, 
@@ -371,8 +500,18 @@ class programGUI(QMainWindow):
             widget.inputBox.setFixedWidth(70)
             widget.showList.setFixedWidth(200)
 
+        # Input metadata        
+        self.metadataBtn = QPushButton('set light source information', self)
+        self.metadataBox = QLineEdit(self)
+        self.metadataBox.setReadOnly(True)
+        self.metadataBtn.clicked.connect(self.openMetadataWindow)
+        self.metadataFieldLayout.addWidget(self.metadataBtn,0,0)
+        self.metadataFieldLayout.addWidget(self.metadataBox,0,1)
+
+
         # Figure placeholder for signature schemes:        
-        self.SignatureCanvas = DataCanvas(self)
+        reactToScroll = False
+        self.SignatureCanvas = DataCanvas(reactToScroll)
 
         # To initialize the widgets and data ignature from a file
         self.setupFromFile(self.configFile)
@@ -399,9 +538,11 @@ class programGUI(QMainWindow):
 
         self.SetupPanelLayout.addLayout(self.selectorLayout,1,0,4,1)
         self.SetupPanelLayout.addLayout(self.inputBoxesLayout,1,1,4,1)
+        self.SetupPanelLayout.addLayout(self.metadataFieldLayout,5,0,4,2)
         self.SetupPanelLayout.addWidget(self.SignatureCanvas,1,2,graphRowSpan,graphColSpan)
         self.SetupPanelLayout.addWidget(self.setupFileWdgt,5,2,graphRowSpan,graphColSpan)
-                
+
+
         # Data panel .......................................................
         # The plots will be shown here together with the threshold interface 
         # for peak assignation. Older data can be loaded here for comparison.        
@@ -417,7 +558,8 @@ class programGUI(QMainWindow):
         self.DataPanelTitle.setStyleSheet(Aesthetics.titleBar)
         
         # Figure placeholder for data:
-        self.DataCanvas = DataCanvas(self, width=5, height=4, dpi=100)
+        reactToScroll = True
+        self.DataCanvas = DataCanvas(reactToScroll, width=5, height=4, dpi=100)
 
         # Data files
         self.dataFileWdgt = FileAccessWidgt(
@@ -425,7 +567,8 @@ class programGUI(QMainWindow):
             self.defaultDataPath, 
             "Data files (*.csv *tsv *.txt)", 
             self.selectDataFile, 
-            self.saveAndUpdatePath
+            self.saveAndUpdatePath,
+            "select_folders"
         )
 
 
@@ -558,10 +701,10 @@ class programGUI(QMainWindow):
         self.central_layout.addWidget(self.DataPanel, 1,0)
         self.central_layout.addWidget(self.ExecPanel, 2,0)
 
-    def saveAndUpdatePath(self, pathMetheny):
+    def saveAndUpdatePath(self, dataSavePath):
         # Ensures that the data path chosen by the user gets
         # saved for the next session(s)
-        self.defaultDataPath = self.saveDataFile(pathMetheny)
+        self.defaultDataPath = self.saveDataFile(dataSavePath)
         TSVAccess.overwriteFieldValueTSV('dataSavePath', self.defaultDataPath, 
             os.path.join(self.settingsFilePath,self.configFile)
             )
@@ -836,6 +979,20 @@ class programGUI(QMainWindow):
                 value = getattr(self, name)
                 newSettingsFile.write(name+'\t'+str(value)+'\n')
 
+    def saveInfoFile(self, infoFilePath, baseFileName):
+        fileName = baseFileName + 'info.txt'
+        fullPath = os.path.join(infoFilePath, fileName)
+        print("saving acquisition information")
+        with open(fullPath, 'w') as infoFile:
+            for name in ["lightSourceModel", 
+                         "lightSourceIdentifier",
+                         "setPowers",
+                         "wavelengths", 
+                         "refWavelength",
+                         "calibrationFactors"]:
+                value = getattr(self, name)
+                infoFile.write(name+'\t'+str(value)+'\n')
+
     def setupFromFile(self,processFileName):
         # First flush the containers
         # Using the GUI function to empty the old data
@@ -881,6 +1038,17 @@ class programGUI(QMainWindow):
         self.CalibrationWindow  = CalibrationWindow(self.testMode, self.wavelengths, self.runCalibration)
         self.CalibrationWindow.show()
     
+    def openMetadataWindow(self):
+        self.MetadataWindow  = MetadataWindow()
+        self.MetadataWindow.closed.connect(lambda message1, message2: self.setMetadata(message1, message2))
+        self.MetadataWindow.show()
+
+    def setMetadata(self, lightSourceModel, lightSourceIdentifier):
+        self.lightSourceModel = lightSourceModel        
+        self.lightSourceIdentifier = lightSourceIdentifier
+        print(self.lightSourceModel, self.lightSourceIdentifier)
+        self.metadataBox.setText(str(self.lightSourceModel)+', '+str(self.lightSourceIdentifier))
+
     def returnValues(self,values):
                 
         timePointStr = values[0][:]
@@ -898,7 +1066,7 @@ class programGUI(QMainWindow):
             self.data.flushFile() # we ensure there is no data from a file 
             self.StartButton.setText("stop")
             self.acquiringNow = True
-            self.acquireLPM()
+            self.refWavelength = self.acquireLPM()
 
     def acquireLPM(self):
         
@@ -927,7 +1095,7 @@ class programGUI(QMainWindow):
             runningMode = 'test-standard'
         else:
             runningMode = 'system-standard'
-        self.dataFileName = basefilename+'-blindMode.csv'
+        self.dataFileName = basefilename+'-blindMode.txt'
         self.avgTime_sec = self.readoutInterval
         self.manager.add_measurement(currSetWavelength, currSetPower, self.dataFileName, self.duration, self.avgTime_sec, runningMode)
         self.manager.start_measurements()
@@ -936,6 +1104,9 @@ class programGUI(QMainWindow):
         # This saves the raw data into a buffer to allow offline reassignment
         self.data.measuredPower = self.acquiredData[1]
         self.acquiringNow = False
+
+        return currSetWavelength
+    
 
     def convertToSeconds(self,timestampArray):       
         secArray = []
@@ -959,9 +1130,16 @@ class programGUI(QMainWindow):
     def saveDataFile(self, path):
         # Reserved for the re-assigned data, appending the original file name with
         # _reassigned. There will be one file per wavelength
-                        
-        savePath, baseName = os.path.split(path[:-4])
         
+        if os.path.isfile(path):
+            savePath, baseName = os.path.split(path[:-4])
+            filename0 = baseName + datetime.now().strftime("%Y%m%d-%H%M_")
+        elif(os.path.isdir(path)):
+            savePath = path
+            filename0 = datetime.now().strftime("%Y%m%d-%H%M_")
+        
+        filename1 = filename0 + 'raw.txt'
+
         # The block below works if the file list is flushed while starting 
         # a new acquisition
         if self.data.getFile() == []:
@@ -974,26 +1152,42 @@ class programGUI(QMainWindow):
         outputPathsFilteredData = []
         
         # Save the originalData
-        filename0 = baseName + datetime.now().strftime("%Y%m%d-%H%M_")
-        filename1 = filename0 + 'raw.csv'
+
         outputPathRawData = os.path.join(savePath,filename1)
         print(outputPathRawData)
 
         if self.dataWasReassigned:
-
+            finalSavePath = os.path.join(savePath, 'Light Sources')
+            os.makedirs(finalSavePath, exist_ok=True)
+            if self.lightSourceModel:
+                finalSavePath = os.path.join(finalSavePath, self.lightSourceModel)
+                os.makedirs(finalSavePath, exist_ok=True)
+                if self.lightSourceIdentifier:
+                    finalSavePath = os.path.join(finalSavePath, self.lightSourceIdentifier)
+                    os.makedirs(finalSavePath, exist_ok=True)
+            # Info file
+            self.saveInfoFile(finalSavePath, filename0)
+            # All data files sorted by wavelength
             for wavelengthInd in range(len(self.signature.wavelengths)):
-                finalSavePath = os.path.join(savePath, 'Light Sources')
-                if not os.path.exists(finalSavePath):
-                    # Create the folder if needed
-                    os.makedirs(finalSavePath)
-
-                filename2 = filename0 + str(self.signature.wavelengths[wavelengthInd]) + 'nm'
                 
-                if self.dataWasRecalibrated:
-                    filename2 = filename2 + '_Corr-' + \
-                    str(round(self.calibrationTable[wavelengthInd],4))
-
-                filename2 = filename2 + '.csv'
+                filename2 = filename0 + str(self.signature.wavelengths[wavelengthInd]) + 'nm'
+                                
+                if(len(self.setPowers)>1):
+                    # More than one intensity -> linear
+                    protocolStr = 'linear'
+                elif((self.order == 'PL' and self.duration >= 1800) |
+                    (self.order == 'LP' and self.duration / self.signature.powerSettingCount > 1800)
+                     ):
+                    # Wavelengths interleaved for more than 30 minutes or 
+                    # a series of more that 30 minuted per wavelength
+                    protocolStr = 'long'
+                else:
+                    protocolStr = 'short'
+                
+                if protocolStr == 'linear':
+                    filename2 = filename2 + '_' + protocolStr + '.txt'
+                elif (protocolStr == 'long' or protocolStr == 'short'):
+                    filename2 = filename2 + '_' + protocolStr + '_' + str(self.setPowers[0]) + '%.txt'
                 outputPathsFilteredData.append(os.path.join(finalSavePath,filename2))
                                  
         header_written = {file: False for file in outputPathsFilteredData}
@@ -1084,17 +1278,11 @@ class programGUI(QMainWindow):
         if (self.dynReassignment):            
             self.displaySortedDataRealTime()
 
-
-
-
         else:    
             self.DataCanvas.redraw(
                     self.acquiredData[0],
                     [self.acquiredData[1],self.thresholdLine]
                 )
-
-
-
 
     def selectDataFile(self, dataFile):
         
@@ -1120,7 +1308,7 @@ class programGUI(QMainWindow):
         self.duration = self.durationInput.value
         if not self.duration == 0:
             self.updateSignature()
-            
+
     def updateReadoutIntervalAndReplot(self):
         self.readoutInterval = self.readoutIntervalInput.value
         self.sampleRate = self.readoutInterval
