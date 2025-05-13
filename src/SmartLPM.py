@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QGridLayout, QComboBox, QLineEdit, 
     QGroupBox, QSpinBox, QApplication, QSlider, QFileDialog, QLayout, QCheckBox, QProgressBar
 )
-from PySide6.QtCore import Qt, QUrl, Signal, QEventLoop
+from PySide6.QtCore import Qt, QUrl, Signal, QEventLoop, Slot
 from PySide6.QtGui import QDesktopServices, QIcon, QAction
 
 import numpy as np
@@ -40,7 +40,8 @@ from fileInterface import TSVAccess
 
 
 class DataCanvas(FigureCanvasQTAgg):
-    
+    newThresholdByClick = Signal(float)
+
     def __init__(self, reactToScroll, parent=None, width=5, height=4, dpi=100):
         fig = Figure(figsize=(width, height), dpi=dpi, layout='constrained')
         self.axes = fig.add_subplot(111, facecolor='black')        
@@ -64,8 +65,9 @@ class DataCanvas(FigureCanvasQTAgg):
     def linkSlider(self, sliderHandle):
         self.slider = sliderHandle
         
-    def redraw(self,xData,yData):
-        self.axes.clear()
+    def redraw(self,xData,yData, clearBefore):
+        if clearBefore:
+            self.axes.clear()
         for ind in range(len(yData)):
             if ind == 0:
                 self.axes.plot(xData,yData[ind],'white')
@@ -75,13 +77,17 @@ class DataCanvas(FigureCanvasQTAgg):
         self.dataMin = min(yData[0][:])
         self.draw()
 
-    def drawOnTop(self,xData,yData, plotColor):
+    def drawOnTop(self,xData,yData, plotColor, connectedLines):
         wavelengthCount = len(yData)
         for wavelength in range(wavelengthCount):
-            self.axes.plot(xData,yData[wavelength],color=plotColor)
+            if connectedLines:
+                self.axes.plot(xData,yData[wavelength],color=plotColor)
+            else:
+                self.axes.plot(xData,yData[wavelength],color=plotColor, marker='.')
+                #self.axes.plot(xData,yData[wavelength],color=plotColor, marker='.', linestyle='')
+
         self.dataMax = max(yData)
         self.dataMin = min(yData)            
-        self.draw()
 
     def addSinglePlot(self,xData,yData, plotColor):
         self.axes.plot(xData,yData,color=plotColor)        
@@ -118,8 +124,11 @@ class DataCanvas(FigureCanvasQTAgg):
 
             if event.button == 1:  # Left mouse button
                 # Get the Y value at the clicked position
-                y_value = event.ydata
-                print(f"Y value at clicked position: {y_value}")
+                clickedValue = event.ydata
+                print(f"Power value at clicked position: {clickedValue}")
+                
+                self.newThresholdByClick.emit(clickedValue)
+
             elif event.button == 3:  # Right mouse button
                 # Reset zoom
                 print(self.dataMax)
@@ -128,23 +137,6 @@ class DataCanvas(FigureCanvasQTAgg):
                     self.draw()
         else:
             print("Clicked outside the axes.")
-
-    def update_slider_position(self):
-        # Get the current Y limits
-        currentYlim = self.axes.get_ylim()
-        lowerLimit, upperLimit = current_ylim
-        
-        # Get the current slider range
-        sliderMin = self.slider.minimum()
-        sliderMax = self.slider.maximum()
-        
-        # Calculate the current Y value (midpoint for example)
-        currYValue = (lowerLimit + upperLimit) / 2
-        
-        # Map the current Y value to the slider range
-        if upperLimit != lowerLimit:  # Avoid division by zero
-            sliderPosition = sliderMin + (currentYValue - lowerLimit) / (upperLimit - lowerLimit) * (sliderMax - sliderMin)
-            self.slider.setValue(int(sliderPosition))
 
 class DataSignature():
 
@@ -385,6 +377,7 @@ class programGUI(QMainWindow):
         
         # Initialization
         self.testMode = testMode
+        self.splitByPower = False
         if self.testMode == True:
             PMUSB = VirtualDevice()
         else:
@@ -425,11 +418,9 @@ class programGUI(QMainWindow):
         self.dataWasReassigned   = False
         self.dataWasRecalibrated = False
 
-        self.policy = 'blind'
-        self.setOffset = 0
-
+        self.policy = 'blind'       
         self.signature = DataSignature()
-        self.offset = 0
+
         # Looking good is important!
         self.setWindowIcon(QIcon(os.path.dirname(__file__)+"/Resource/logo.png"))
         
@@ -542,7 +533,6 @@ class programGUI(QMainWindow):
         self.SetupPanelLayout.addWidget(self.SignatureCanvas,1,2,graphRowSpan,graphColSpan)
         self.SetupPanelLayout.addWidget(self.setupFileWdgt,5,2,graphRowSpan,graphColSpan)
 
-
         # Data panel .......................................................
         # The plots will be shown here together with the threshold interface 
         # for peak assignation. Older data can be loaded here for comparison.        
@@ -560,6 +550,8 @@ class programGUI(QMainWindow):
         # Figure placeholder for data:
         reactToScroll = True
         self.DataCanvas = DataCanvas(reactToScroll, width=5, height=4, dpi=100)
+        # The line below connects the two mechanisms to set the threshold
+        self.DataCanvas.newThresholdByClick.connect(self.thresholdAdjustedByClick)
 
         # Data files
         self.dataFileWdgt = FileAccessWidgt(
@@ -570,7 +562,6 @@ class programGUI(QMainWindow):
             self.saveAndUpdatePath,
             "select_folders"
         )
-
 
         # Threshold slider
         self.ThresholdSlider = QSlider()
@@ -629,6 +620,16 @@ class programGUI(QMainWindow):
         self.dynCalChk.stateChanged.connect(self.toggleDynamicCorrection)
 
         self.toggleCheckEnable(self.dynCalChk, "off")
+        
+
+        # Split files by power .....................................
+        self.splitByPowerCheck = QCheckBox("split data by power")
+        if self.splitByPower == True:
+            self.splitByPowerCheck.setChecked(True)
+        else:
+            self.splitByPowerCheck.setChecked(False)
+        
+        self.splitByPowerCheck.stateChanged.connect(self.togglePowerSplit)
 
         # All elements into panel
         dataplotSpanV = 1
@@ -651,10 +652,11 @@ class programGUI(QMainWindow):
         dataplotSpanH = 3
         dataplotSpanV = 2
         self.DataPanelLayout.addWidget(self.DataPanelTitle, 0,0, titleSpanH, titleSpanV)
-        self.DataPanelLayout.addLayout(self.DataControlsLayout,1,0)        
+        self.DataPanelLayout.addLayout(self.DataControlsLayout,1,0)
         self.DataPanelLayout.addWidget(self.ThresholdSlider,0,4, dataplotSpanV , 1)
         self.DataPanelLayout.addWidget(self.DataCanvas,0,1,dataplotSpanV,dataplotSpanH)
         self.DataPanelLayout.addWidget(self.dataFileWdgt,2,1,dataplotSpanV,dataplotSpanH)
+        self.DataPanelLayout.addWidget(self.splitByPowerCheck,4,3, alignment=Qt.AlignRight)
 
         self.DataCanvas.draw()        
         
@@ -775,11 +777,18 @@ class programGUI(QMainWindow):
                 self.buttonEnable(self.StartButton, "Acquisition without correction")
 
         print('dynamic correction set to ' + str(self.dynCorrection))
+        
+    def togglePowerSplit(self):
+        if self.splitByPowerCheck.isChecked():            
+            self.splitByPower = True
+            print('Files will be split by power')
+        else:
+            self.splitByPower = False
+            print('Files will not be split by power')
 
     def toggleDynamicReassignment(self):
         if self.dynReasChk.isChecked():
-            #self.reassignData()
-            self.thresholdChanged(self.data.threshold)
+            self.thresholdAdjustedByClick(self.data.threshold)
             self.dynReassignment = True
             self.dataWasReassigned = True
         else:
@@ -836,8 +845,7 @@ class programGUI(QMainWindow):
         
 
     def assignCurrPoint(self, currElementInd, currPulse, indL, indP, currentPower):
-       
-        # print("threshod being applied", self.data.threshold)
+
         if currentPower <= self.data.threshold:
             currentPower = 0
         else:
@@ -1017,7 +1025,7 @@ class programGUI(QMainWindow):
         self.readoutIntervalInput.inputEdit.setText(str(self.readoutInterval))
         self.signaturePauseInput.inputEdit.setText(str(self.signaturePause))
 
-
+        self.setMetadata(self.lightSourceModel,self.lightSourceIdentifier)
 
         print('Adding wavelengths:')
         for wavelength in DataSignature.stringOrList2Array(self.wavelengths):
@@ -1057,7 +1065,7 @@ class programGUI(QMainWindow):
         self.selectDataStream(timePointStr)
     
     def startStop(self):
-        if self.acquiringNow:                        
+        if self.acquiringNow:
             self.manager.finishThreads()
             self.StartButton.setText("Aquire now")
             self.acquiringNow = False
@@ -1067,6 +1075,8 @@ class programGUI(QMainWindow):
             self.StartButton.setText("stop")
             self.acquiringNow = True
             self.refWavelength = self.acquireLPM()
+    
+
 
     def acquireLPM(self):
         
@@ -1081,8 +1091,9 @@ class programGUI(QMainWindow):
         def acquisitionComplete():
             self.acqEventLoop.quit()
 
-        basefilename =  datetime.now().strftime("%Y%m%d-%H%M_")
-        
+        basefilename =  datetime.now().strftime("%Y%m%d-%H%M_")        
+        basefilename = os.path.join(self.defaultDataPath, basefilename)
+
         self.manager = MeasurementManager(self.device.sensor, self.returnValues)
         # use the values from the GUI
         
@@ -1095,6 +1106,7 @@ class programGUI(QMainWindow):
             runningMode = 'test-standard'
         else:
             runningMode = 'system-standard'
+
         self.dataFileName = basefilename+'-blindMode.txt'
         self.avgTime_sec = self.readoutInterval
         self.manager.add_measurement(currSetWavelength, currSetPower, self.dataFileName, self.duration, self.avgTime_sec, runningMode)
@@ -1105,6 +1117,7 @@ class programGUI(QMainWindow):
         self.data.measuredPower = self.acquiredData[1]
         self.acquiringNow = False
 
+        self.StartButton.setText("Aquire now")
         return currSetWavelength
     
 
@@ -1149,7 +1162,7 @@ class programGUI(QMainWindow):
             autosavedFile = self.data.getFile()        
             inputFullPath = os.path.join(path,autosavedFile)
                 
-        outputPathsFilteredData = []
+        outputPathsFilteredData = {}
         
         # Save the originalData
 
@@ -1169,28 +1182,44 @@ class programGUI(QMainWindow):
             self.saveInfoFile(finalSavePath, filename0)
             # All data files sorted by wavelength
             for wavelengthInd in range(len(self.signature.wavelengths)):
-                
+
                 filename2 = filename0 + str(self.signature.wavelengths[wavelengthInd]) + 'nm'
-                                
-                if(len(self.setPowers)>1):
-                    # More than one intensity -> linear
-                    protocolStr = 'linear'
-                elif((self.order == 'PL' and self.duration >= 1800) |
-                    (self.order == 'LP' and self.duration / self.signature.powerSettingCount > 1800)
-                     ):
-                    # Wavelengths interleaved for more than 30 minutes or 
-                    # a series of more that 30 minuted per wavelength
-                    protocolStr = 'long'
+
+                if self.splitByPower:
+                    if((self.order == 'PL' and self.duration >= 1800) |
+                        (self.order == 'LP' and self.duration / self.signature.powerSettingCount > 1800)
+                        ):
+                        # Wavelengths interleaved for more than 30 minutes or 
+                        # a series of more that 30 minuted per wavelength
+                        protocolStr = 'long'
+                    else:
+                        protocolStr = 'short'
+                    for powerInd in range(len(self.signature.setPowers)):
+                        filename3 = filename2 + '_' + protocolStr + '_' + str(self.setPowers[powerInd]) + '%.txt'                    
+                        outputPathsFilteredData[(wavelengthInd, powerInd)] = os.path.join(finalSavePath,filename3)
+
                 else:
-                    protocolStr = 'short'
-                
-                if protocolStr == 'linear':
-                    filename2 = filename2 + '_' + protocolStr + '.txt'
-                elif (protocolStr == 'long' or protocolStr == 'short'):
-                    filename2 = filename2 + '_' + protocolStr + '_' + str(self.setPowers[0]) + '%.txt'
-                outputPathsFilteredData.append(os.path.join(finalSavePath,filename2))
-                                 
-        header_written = {file: False for file in outputPathsFilteredData}
+
+                    if(len(self.setPowers)>1):
+                        # More than one intensity -> linear
+                        protocolStr = 'linear'
+                    elif((self.order == 'PL' and self.duration >= 1800) |
+                        (self.order == 'LP' and self.duration / self.signature.powerSettingCount > 1800)
+                        ):
+                        # Wavelengths interleaved for more than 30 minutes or 
+                        # a series of more that 30 minuted per wavelength
+                        protocolStr = 'long'
+                    else:
+                        protocolStr = 'short'
+                    
+                    if protocolStr == 'linear':
+                        filename2 = filename2 + '_' + protocolStr + '.txt'
+                    elif (protocolStr == 'long' or protocolStr == 'short'):
+                        filename2 = filename2 + '_' + protocolStr + '_' + str(self.setPowers[0]) + '%.txt'
+                    
+                    outputPathsFilteredData[(wavelengthInd)]= os.path.join(finalSavePath,filename2)
+        
+        header_written = {key: False for key in outputPathsFilteredData}                                 
         with open(inputFullPath, 'r', newline='') as infile, open(outputPathRawData, 'w+', newline='') as outfileMain:
             reader = csv.reader(infile, delimiter='\t')
             writer1 = csv.writer(outfileMain, delimiter='\t')
@@ -1213,17 +1242,24 @@ class programGUI(QMainWindow):
                     
                     print(outputPathsFilteredData)
 
-                    file = outputPathsFilteredData[wavelengthInd]
+                    if self.splitByPower:
+                        fileKey = (wavelengthInd, powerInd)
+                    else:
+                        fileKey = wavelengthInd
+
+                    file = outputPathsFilteredData.get(fileKey)
+
                     with open(file, 'a+', newline='') as outfileFiltered:
                         writer2 = csv.writer(outfileFiltered, delimiter='\t')
-                        if not header_written[file]:
+                        if not header_written[fileKey]:
                             # Write the header to this file only once
                             writer2.writerow(header)
-                            header_written[file] = True
+                            header_written[fileKey] = True
                         else:
                             row[1] = str(self.signature.wavelengths[wavelengthInd])
                             row[2] = str(self.signature.setPowers[powerInd])
                             writer2.writerow(row)
+
         return savePath
 
     def selectDataStream(self, timeLabels):
@@ -1259,30 +1295,26 @@ class programGUI(QMainWindow):
             self.minPowserMeasured = min(self.realTimePowers)
             self.maxPowserMeasured = max(self.realTimePowers)                
 
-            self.DataCanvas.axes.set_ylim(self.minPowserMeasured, self.maxPowserMeasured)
-
-            self.ThresholdSliderStep = (self.maxPowserMeasured - self.minPowserMeasured) / self.ThresholdSliderSteps            
-            self.ThresholdSlider.setMinimum(0)
-            self.ThresholdSlider.setMaximum(self.ThresholdSliderSteps)
-            self.ThresholdSlider.setSingleStep(self.ThresholdSliderSteps)
-            self.thresholdLine = np.ones(self.dataLength)*self.setOffset
-
+            self.thresholdLine = np.ones(self.dataLength)*self.data.threshold
             
             if self.maxPowserMeasured != self.minPowserMeasured:
+                
+                self.DataCanvas.axes.set_ylim(self.minPowserMeasured, self.maxPowserMeasured)
+
+                self.ThresholdSliderStep = (self.maxPowserMeasured - self.minPowserMeasured) / self.ThresholdSliderSteps            
+                self.ThresholdSlider.setMinimum(0)
+                self.ThresholdSlider.setMaximum(self.ThresholdSliderSteps)
+                self.ThresholdSlider.setSingleStep(self.ThresholdSliderSteps)
+
                 self.ThresholdSlider.setValue(100 * (self.data.threshold - self.minPowserMeasured)/ 
                     (self.maxPowserMeasured - self.minPowserMeasured)
                     )
-            else:
-                self.ThresholdSlider.setValue(0)
+
+        doNotClearBefore = False        
+        self.DataCanvas.redraw(self.acquiredData[0],[self.acquiredData[1],self.thresholdLine], doNotClearBefore)
 
         if (self.dynReassignment):            
             self.displaySortedDataRealTime()
-
-        else:    
-            self.DataCanvas.redraw(
-                    self.acquiredData[0],
-                    [self.acquiredData[1],self.thresholdLine]
-                )
 
     def selectDataFile(self, dataFile):
         
@@ -1302,7 +1334,7 @@ class programGUI(QMainWindow):
             self.ThresholdSlider.setMinimum(0)
             self.ThresholdSlider.setMaximum(self.ThresholdSliderSteps)
             self.ThresholdSlider.setSingleStep(self.ThresholdSliderSteps)   
-            self.displayMeasData(self.offset) # Initially 0
+            self.displayMeasData(self.data.threshold) # Initially 0
 
     def updateDurationAndReplot(self):
         self.duration = self.durationInput.value
@@ -1335,25 +1367,15 @@ class programGUI(QMainWindow):
         # might not be created yet
         if hasattr(self, 'refWavelthInput'):
             self.refWavelthInput.updateList(self.wavelengths)
-
         
     def updatePowersAndReplot(self):
         self.setPowers = self.powerSettingWidget.list
         print(self.setPowers)
         self.updateSignature()
     
-    def thresholdChanged(self,thresholdInput):
-        
-        if len(self.data.measuredPower) != 0 or self.acquiringNow:
-            self.minPowserMeasured = min(self.acquiredData[1,:]) 
-            self.maxPowserMeasured = max(self.acquiredData[1,:]) 
-        else:
-            self.minPowserMeasured = 0
-            self.maxPowserMeasured = 1
-               
-        threshold = (thresholdInput/100)*(self.maxPowserMeasured - self.minPowserMeasured) + self.minPowserMeasured        
-        self.data.setThreshold(threshold)
-        
+    def thresholdAdjustedByClick(self, newThreshold):
+
+        self.data.setThreshold(newThreshold)
         if self.dynReassignment and self.acquiringNow:
             
             self.structuredData = np.zeros((self.signature.readoutCount, self.signature.wavelengthCount, self.signature.powerSettingCount))
@@ -1374,25 +1396,47 @@ class programGUI(QMainWindow):
                     self.structuredData[element,reasWlthInd,reasPrwsInd] = \
                         self.realTimePowers[element]
                     self.reassignedData[element,reasWlthInd] = self.realTimePowers[element]
-                nextElement = element
+                element = nextElement
 
             self.realTimePoint = element
             self.realTimePulse = reasPulseInd
             self.realTimeLInd  = reasWlthInd 
-            self.realTimePind  = reasPrwsInd
-                    
-            # self.displaySortedData()
+            self.realTimePind  = reasPrwsInd                                
+
+            self.DataCanvas.axes.clear()
+            self.displaySortedDataRealTime()
 
         elif len(self.data.measuredPower) != 0 or len(self.realTimePowers) != 0:
-                self.displayMeasData(self.data.threshold)
+            self.displayMeasData(self.data.threshold)
+        
+    @Slot()
+    def thresholdChangedOutside(self, thresholdSignal):
+        self.thresholdAdjustedByClick(thresholdSignal)
 
-    def displayMeasData(self,value):        
-        self.setOffset = value
-        print('displayMeasData -> displayMeasData(self,value), with value:',self.setOffset)
+    def thresholdChanged(self,thresholdInput):
+        
+        if len(self.data.measuredPower) != 0 or self.acquiringNow:
+            self.minPowserMeasured = min(self.acquiredData[1,:]) 
+            self.maxPowserMeasured = max(self.acquiredData[1,:]) 
+        else:
+            self.minPowserMeasured = 0
+            self.maxPowserMeasured = 1
+        
+        # To convert the slider position into a meaningful value
+        threshold = (thresholdInput/100)*(self.maxPowserMeasured - self.minPowserMeasured) + self.minPowserMeasured        
+                
+        self.thresholdAdjustedByClick(threshold)
+
+    def displayMeasData(self,newThreshold):        
+        self.data.setThreshold(newThreshold)
+
+        clearBefore = True
+        print('displayMeasData -> displayMeasData(self,value), with value:',self.data.threshold)
         self.thresholdLine = np.ones(self.dataLength)*self.data.threshold
         self.DataCanvas.redraw(
             self.acquiredData[0],
-            [self.acquiredData[1],self.thresholdLine]
+            [self.acquiredData[1],self.thresholdLine], 
+            clearBefore
         )
 
     def displaySortedData(self):
@@ -1401,19 +1445,21 @@ class programGUI(QMainWindow):
         RGB[:,1] = self.signature.Green
         RGB[:,2] = self.signature.Blue
 
-        self.thresholdLine = np.ones(self.dataLength)*self.setOffset
-        print('displaySortedData -> displayMeasData(self), with self.setOffset:',self.setOffset)
+        self.thresholdLine = np.ones(self.dataLength)*self.data.threshold
+        print('displaySortedData -> displayMeasData(self), with self.setOffset:',self.data.threshold)
         self.DataCanvas.axes.clear()
         self.DataCanvas.axes.plot(self.acquiredData[0],self.thresholdLine, color = 'gray', linestyle='dashed')
         self.DataCanvas.draw()
         for wavelength in range(self.data.wavelengthCount):
             plotColor = (RGB[wavelength,0]/255,RGB[wavelength,1]/255,RGB[wavelength,2]/255)  
-            
+            connectedLines = True
             self.DataCanvas.drawOnTop(
                 self.acquiredData[0],
                 [self.reassignedData[:,wavelength]], 
-                plotColor
+                plotColor, connectedLines
             )
+        if not self.acquiringNow:
+            self.DataCanvas.draw()
 
     def displaySortedDataRealTime(self):
        
@@ -1425,15 +1471,13 @@ class programGUI(QMainWindow):
 
         for wavelength in range(self.signature.wavelengthCount):
             plotColor = (RGB[wavelength,0]/255,RGB[wavelength,1]/255,RGB[wavelength,2]/255)  
-
+            disconnectedLines = False
             self.DataCanvas.drawOnTop(
                 self.timePoints,
                 [self.reassignedData[0:len(self.timePoints),wavelength]],
-                plotColor
+                plotColor, disconnectedLines
             )
-        self.DataCanvas.axes.plot(self.timePoints,self.thresholdLine,color='gray', linestyle='dashed')
-        self.DataCanvas.draw()
-            
+
     def updateSignature(self):
         self.signature.setParameters(
             self.wavelengths, self.setPowers, 
