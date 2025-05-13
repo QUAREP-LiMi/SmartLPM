@@ -116,9 +116,9 @@ class DataObject:
             # find the order:
             try:
                 order = [fieldNames.index('timestamp'), \
-                         fieldNames.index('wavelength[nm]'), \
-                         fieldNames.index('setting[%]'), \
-                        fieldNames.index('power[mW]')]
+                         fieldNames.index('wavelength'), \
+                         fieldNames.index('setting'), \
+                        fieldNames.index('power')]
             except:
                 order = [fieldNames.index('timestamp'), \
                          fieldNames.index('wavelength'), \
@@ -154,6 +154,10 @@ class DataObject:
             Lidx = self.wavelength.index(int(line[1]))
             Pidx = self.powerSetting.index(int(line[2]))
             self.dataMap[element, :] = [Tidx, Lidx, Pidx]
+
+
+        #setMetadata(self, lightSourceModel, lightSourceIdentifier)
+
 
         print(self.fieldLabels)
         print(self.dataMap.shape)
