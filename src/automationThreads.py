@@ -74,7 +74,7 @@ class Worker(QObject):
                 with open(self.fileName, "a") as fout:
                     if fout and os.stat(self.fileName).st_size == 0:
                         sys.stdout = fout
-                        print("timestamp\twavelength[nm]\tsetting[%]\tpower[mW]\ttemperature[C]")
+                        print("timestamp\twavelength\tsetting\tpower\ttemperature")
                         sys.stdout = origStdOut
 
                 start = datetime.now()
@@ -133,9 +133,9 @@ class Worker(QObject):
                     if fout and os.stat(self.fileName).st_size == 0:
                         sys.stdout = fout
                         if not thermometer:
-                            print("timestamp\twavelength[nm]\tsetting[%]\tpower[mW]")
+                            print("timestamp\twavelength\tsetting\tpower")
                         elif temperature.value != 0:
-                            print("timestamp\twavelength[nm]\tsetting[%]\tpower[mW]\ttemperature[C]")
+                            print("timestamp\twavelength\tsetting\tpower\ttemperature")
                         sys.stdout = origStdOut
                 
                 time.sleep(0.5)  # Without this delay, the first number is consistently higher than the rest
@@ -286,8 +286,6 @@ class Worker(QObject):
         finally:
             print(f"Worker finishing for wavelength {self.wavelength}.")            
             self.finished.emit()
-
-
 
 class MeasurementManager(QObject):
     finished = Signal()
