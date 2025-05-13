@@ -251,8 +251,11 @@ class InputBox(QWidget):
 
     def setValue(self):
         inputText = self.inputEdit.text()
+        print(inputText)
         try:
-            self.value = int(inputText)
+            self.value = float(inputText)
+            self.value = np.floor(self.value)
+            #self.value = int(inputText)
             self.function()
         except ValueError:
             print("Invalid input: Please enter an integer.")
