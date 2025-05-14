@@ -1470,13 +1470,14 @@ class programGUI(QMainWindow):
         RGB[:,2] = self.signature.Blue
 
         for wavelength in range(self.signature.wavelengthCount):
-            plotColor = (RGB[wavelength,0]/255,RGB[wavelength,1]/255,RGB[wavelength,2]/255)  
-            disconnectedLines = False
-            self.DataCanvas.drawOnTop(
-                self.timePoints,
-                [self.reassignedData[0:len(self.timePoints),wavelength]],
-                plotColor, disconnectedLines
-            )
+            for powerSetting in range(self.signature.powerSettingCount):
+                plotColor = (RGB[wavelength,0]/255,RGB[wavelength,1]/255,RGB[wavelength,2]/255)  
+                connectedLines = True
+                self.DataCanvas.drawOnTop(
+                    self.timePoints,
+                    [self.structuredData[0:len(self.timePoints),wavelength,powerSetting]],
+                    plotColor, connectedLines
+                )
 
     def updateSignature(self):
         self.signature.setParameters(
