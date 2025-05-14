@@ -120,7 +120,7 @@ To ensure the correct operation of microscopes it is necessary to measure the il
 At the moment this program is provided as python source code. For controlling the power meters from Thorlaabs it requires the TLPM64.dll driver wich is distributed with the [Optical Power Monitor software](https://www.thorlabs.de/newgrouppage9.cfm?objectgroup_id=4037). The driver has to be saved together with the python files. Copy all the source files together with the folders under the src folder. These folders contain auxiliary files needed by the application to run properly.
 
 ## Authors and acknowledgment
-The program was created by Nasser Darwish, imaging expert at the Imaging and Optics Facility, Institute of Science and Technology Austria.
+The program was originally created by Nasser Darwish, imaging expert at the Imaging and Optics Facility, Institute of Science and Technology Austria. Arne Fallisch, Staff Scientist at the Life Imaging Center, Albert-Ludwigs Universität Freiburg has contributed in multiple ways to the improvement of the software.
 
 ## License
 Copyright©2025. Institute of Science and Technology Austria (ISTA). All Rights Reserved.
