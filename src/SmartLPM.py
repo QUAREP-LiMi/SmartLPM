@@ -31,6 +31,8 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.widgets import SpanSelector
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from colorhandling import ColorHandler
 from lpmInterface import VirtualDevice, SensorDevice, PowerMeter, MeasurementManager
 from lpmParser import DataObject
@@ -409,6 +411,8 @@ class programGUI(QMainWindow):
         self.calibratedWavelengths = []
         self.calibrationConsistency = False #True when calibrated wavelengths match the ones listed for measurement
         self.refWavelength = []
+        self.lightSourceModel = ""
+        self.lightSourceIdentifier = ""
 
         # How to handle plots: automatic 
         # reassignment and correction 
@@ -1173,10 +1177,10 @@ class programGUI(QMainWindow):
             finalSavePath = os.path.join(savePath, 'Light Sources')
             os.makedirs(finalSavePath, exist_ok=True)
             if self.lightSourceModel:
-                finalSavePath = os.path.join(finalSavePath, self.lightSourceModel)
+                finalSavePath = os.path.join(finalSavePath, str(self.lightSourceModel))
                 os.makedirs(finalSavePath, exist_ok=True)
                 if self.lightSourceIdentifier:
-                    finalSavePath = os.path.join(finalSavePath, self.lightSourceIdentifier)
+                    finalSavePath = os.path.join(finalSavePath, str(self.lightSourceIdentifier))
                     os.makedirs(finalSavePath, exist_ok=True)
             # Info file
             self.saveInfoFile(finalSavePath, filename0)
