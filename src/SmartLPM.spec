@@ -2,14 +2,14 @@
 
 
 a = Analysis(
-    ['SmartLPM.pyw'],
+    ['SmartLPM.py'],
     pathex=[],
     binaries=[],    
     datas=[        
-        ('Config\*', 'Config'),
+        ('C:/ProgramData/SmartLPM/Config', 'Config'),
         ('Resource\*', 'Resource'),
         ('TLPM_64.dll', '.'),
-        ('icon350x350.ico', '.'),
+        ('Resource\icon350x350.ico', '.'),
     ],
     hiddenimports=[],
     hookspath=[],
@@ -46,7 +46,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='icon350x350.ico',
+    icon=icon_file,
 )
 coll = COLLECT(
     exe,
