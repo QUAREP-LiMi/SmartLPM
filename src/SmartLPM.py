@@ -1,6 +1,4 @@
 """    
-@author: Nasser Darwish, Institute of Science and Technology Austria
-
 This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -413,6 +411,7 @@ class programGUI(QMainWindow):
         self.refWavelength = []
         self.lightSourceModel = ""
         self.lightSourceIdentifier = ""
+
 
         # How to handle plots: automatic 
         # reassignment and correction 
@@ -1201,7 +1200,6 @@ class programGUI(QMainWindow):
                     for powerInd in range(len(self.signature.setPowers)):
                         filename3 = filename2 + '_' + protocolStr + '_' + str(self.setPowers[powerInd]) + '%.txt'                    
                         outputPathsFilteredData[(wavelengthInd, powerInd)] = os.path.join(finalSavePath,filename3)
-
                 else:
 
                     if(len(self.setPowers)>1):
