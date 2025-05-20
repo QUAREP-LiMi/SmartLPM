@@ -1,6 +1,4 @@
 """    
-@author: Nasser Darwish, Institute of Science and Technology Austria
-
 This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -74,7 +72,7 @@ class Worker(QObject):
                 with open(self.fileName, "a") as fout:
                     if fout and os.stat(self.fileName).st_size == 0:
                         sys.stdout = fout
-                        print("timestamp\twavelength\tsetting\tpower\ttemperature")
+                        print("timestamp\twavelength\tpower\ttemperature")
                         sys.stdout = origStdOut
 
                 start = datetime.now()
@@ -133,9 +131,9 @@ class Worker(QObject):
                     if fout and os.stat(self.fileName).st_size == 0:
                         sys.stdout = fout
                         if not thermometer:
-                            print("timestamp\twavelength\tsetting\tpower")
+                            print("timestamp\twavelength\tpower")
                         elif temperature.value != 0:
-                            print("timestamp\twavelength\tsetting\tpower\ttemperature")
+                            print("timestamp\twavelength\tpower\ttemperature")
                         sys.stdout = origStdOut
                 
                 time.sleep(0.5)  # Without this delay, the first number is consistently higher than the rest
