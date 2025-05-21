@@ -1,10 +1,12 @@
 Process:
 wavelengths	[405, 488, 561, 640]
-setPowers	[80]
-duration	1260
-measurementInterval	1200
+setPowers	[1, 2, 4, 8, 16, 32, 64, 100]
+duration	228.0
+measurementInterval	224.0
 averageInterval	1
 readoutInterval	1
-signaturePause	30
+signaturePause	2
 order	LP
-dataSavePath	C:/ProgramData/SmartLPM/sampleData/split
+dataSavePath	C:/ProgramData/SmartLPM/sampleData
+lightSourceModel	example light source
+lightSourceIdentifier	test setup
