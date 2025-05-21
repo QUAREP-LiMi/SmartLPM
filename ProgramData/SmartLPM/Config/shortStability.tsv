@@ -7,6 +7,6 @@ averageInterval	1
 readoutInterval	1
 signaturePause	25
 order	LP
-dataSavePath	C:/ProgramData/SmartLPM/sampleData/split
+dataSavePath	C:\ProgramData\SmartLPM\Data
 lightSourceModel	example light source
 lightSourceIdentifier	test setup
