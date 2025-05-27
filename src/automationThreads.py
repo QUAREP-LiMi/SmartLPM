@@ -72,7 +72,7 @@ class Worker(QObject):
                 with open(self.fileName, "a") as fout:
                     if fout and os.stat(self.fileName).st_size == 0:
                         sys.stdout = fout
-                        print("timestamp\twavelength\tpower\ttemperature")
+                        print("timestamp\twavelength\tsetting\tpower\ttemperature")
                         sys.stdout = origStdOut
 
                 start = datetime.now()
@@ -131,9 +131,9 @@ class Worker(QObject):
                     if fout and os.stat(self.fileName).st_size == 0:
                         sys.stdout = fout
                         if not thermometer:
-                            print("timestamp\twavelength\tpower")
+                            print("timestamp\twavelength\tsetting\tpower")
                         elif temperature.value != 0:
-                            print("timestamp\twavelength\tpower\ttemperature")
+                            print("timestamp\twavelength\tsetting\tpower\ttemperature")
                         sys.stdout = origStdOut
                 
                 time.sleep(0.5)  # Without this delay, the first number is consistently higher than the rest
