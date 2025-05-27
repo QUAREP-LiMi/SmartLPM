@@ -1263,6 +1263,15 @@ class programGUI(QMainWindow):
                         else:
                             row[1] = str(self.signature.wavelengths[wavelengthInd])
                             row[2] = str(self.signature.setPowers[powerInd])
+
+                            tempValue = float(row[3])
+                            if tempValue >= self.data.threshold:
+                                # Exclude raw data points below threshold
+                                print(row)
+                                if self.dataWasRecalibrated:
+                                    # Apply corrections before saving data
+                                    row[3] = self.calibrationTable[wavelengthInd] * tempValue
+                            
                             writer2.writerow(row)
 
         return savePath
