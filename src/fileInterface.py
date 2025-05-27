@@ -31,10 +31,10 @@ class TSVAccess():
                         if ',' in value and '[' in value and ']' in value:                            
                             strVal = value[1:-1].split(',')
                             value = []
-                            for element in strVal: value.append(int(element))                            
+                            for element in strVal: value.append(float(element))                            
                         else:
                             try:
-                                value = int(value)                                
+                                value = float(value)                                
                             except ValueError:
                                 # If conversion fails, treat it as a string
                                 # In case there are quote signs we remove them:
