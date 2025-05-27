@@ -13,7 +13,7 @@ This program is free software: you can redistribute it and/or modify
     along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
 
-import sys, os, csv
+import sys, os, csv, shutil
 from datetime import datetime
 
 from PySide6.QtWidgets import (
@@ -37,7 +37,10 @@ from lpmParser import DataObject
 from customGUI import Aesthetics, ListSelect, PushPopList, InputBox, FileAccessWidgt
 from fileInterface import TSVAccess
 
-
+if not os.path.exists("c:/ProgramData/SmartLPM/Config/defaultProcess.tsv"):
+    os.mkdir("c:/ProgramData/SmartLPM")
+    os.mkdir("c:/ProgramData/SmartLPM/Config")
+    shutil.copyfile(os.path.join(os.path.dirname(os.path.abspath(__file__)),"Config","defaultProcess.tsv"),r"C:\ProgramData\SmartLPM\Config\defaultProcess.tsv")
 
 class DataCanvas(FigureCanvasQTAgg):
     newThresholdByClick = Signal(float)
