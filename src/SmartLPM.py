@@ -13,7 +13,7 @@ This program is free software: you can redistribute it and/or modify
     along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
 
-import sys, os, csv, shutil
+import sys, os, csv
 from datetime import datetime
 
 from PySide6.QtWidgets import (
@@ -1147,16 +1147,20 @@ class programGUI(QMainWindow):
         return secArray
 
     def saveDataFile(self, path):
-        # Reserved for the re-assigned data, appending the original file name with
-        # _reassigned. There will be one file per wavelength
-        
+        # Reserved for the re-assigned data. These files will be saved
+        # in the "light sources" directory. 
+       
         if os.path.isfile(path):
             savePath, baseName = os.path.split(path[:-4])
             filename0 = baseName + datetime.now().strftime("%Y%m%d-%H%M_")
         elif(os.path.isdir(path)):
             savePath = path
             filename0 = datetime.now().strftime("%Y%m%d-%H%M_")
-        
+
+        # Ensure that the destination folder exists
+        if not os.path.exists(savePath):
+            os.makedirs(savePath, exist_ok=True)
+
         filename1 = filename0 + 'raw.txt'
 
         # The block below works if the file list is flushed while starting 
@@ -1224,7 +1228,7 @@ class programGUI(QMainWindow):
                     
                     outputPathsFilteredData[(wavelengthInd)]= os.path.join(finalSavePath,filename2)
         
-        header_written = {key: False for key in outputPathsFilteredData}                                 
+        header_written = {key: False for key in outputPathsFilteredData}
         with open(inputFullPath, 'r', newline='') as infile, open(outputPathRawData, 'w+', newline='') as outfileMain:
             reader = csv.reader(infile, delimiter='\t')
             writer1 = csv.writer(outfileMain, delimiter='\t')
@@ -1232,19 +1236,52 @@ class programGUI(QMainWindow):
             # Assuming the first row is the header
             header = next(reader)
             writer1.writerow(header)
-            
-            for row_index, row in enumerate(reader, start=1):             
+
+            # here a strategy to get rid of the transition points:
+            # Due to averaging some power values appear at the slopes 
+            # of the detected pulses. They are still above threshold 
+            # but far below real power values. The "transition" points 
+            # at both ends of each pulse will not be saved.
+
+            isTransitionPoint = False
+            prevWavelengthInd = -1
+            prevSetPowerInd   = -1
+
+            for row_index, row in enumerate(reader, start=1):
+
                 writer1.writerow(row)
 
                 # For the file split:
                 element = row_index - 1
                 wavelengthInd = self.pointers[element, 0]
                 powerInd      = self.pointers[element, 1]
-                
+
+                # For excluding transitional points ...........................................
+                try:
+                    nextWavelengthInd = self.pointers[element+1, 0]
+                    nextPowerInd   = self.pointers[element+1, 1]
+                except:
+                    # At the end of the file there are no pints available
+                    nextWavelengthInd = wavelengthInd
+                    nextPowerInd   = powerInd
+
                 if not np.isnan(wavelengthInd) and not np.isnan(powerInd):
                     wavelengthInd = int(wavelengthInd)
                     powerInd = int(powerInd)
                     
+                    if ((wavelengthInd != prevWavelengthInd) or (powerInd != prevSetPowerInd)):
+                        # beggining of the pulse
+                        isTransitionPoint = True
+                    elif ((wavelengthInd != nextWavelengthInd) or (powerInd != nextPowerInd)):
+                        # end of the pulse
+                        isTransitionPoint = True
+                    else:
+                        isTransitionPoint = False
+
+                    prevWavelengthInd = wavelengthInd
+                    prevSetPowerInd   = powerInd
+                    # ..........................................................................
+
                     print(outputPathsFilteredData)
 
                     if self.splitByPower:
@@ -1263,16 +1300,23 @@ class programGUI(QMainWindow):
                         else:
                             row[1] = str(self.signature.wavelengths[wavelengthInd])
                             row[2] = str(self.signature.setPowers[powerInd])
-
+                            
+                            
                             tempValue = float(row[3])
-                            if tempValue >= self.data.threshold:
+                            if tempValue >= self.data.threshold:                                
+
                                 # Exclude raw data points below threshold
                                 print(row)
                                 if self.dataWasRecalibrated:
                                     # Apply corrections before saving data
-                                    row[3] = self.calibrationTable[wavelengthInd] * tempValue
-                            
-                            writer2.writerow(row)
+                                    tempValue = self.calibrationTable[wavelengthInd] * tempValue
+                                
+                                if not isTransitionPoint:
+                                    # transition points will not be written
+
+                                    row[3] = tempValue
+                                    writer2.writerow(row)
+
 
         return savePath
 

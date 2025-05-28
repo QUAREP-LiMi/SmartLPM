@@ -191,7 +191,11 @@ class Worker(QObject):
 
                             # This function (to update plots) is expected to run every 
                             # time a new value is acquired
-                            self.calledFunction(self.results)
+                            try:
+                                self.calledFunction(self.results)
+                            except:
+                                pass
+
                         ind = ind+1
                 self.sensor.disconnect()
                 print(f"Worker completing for wavelength {self.wavelength}.")
